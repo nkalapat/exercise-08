@@ -1,0 +1,99 @@
+---
+title: "exercise-08"
+format: html
+---
+
+library(tidyverse)
+library(skimr)
+library(ggplot2)
+library(broom)
+
+#Step 1 
+f <- "https://raw.githubusercontent.com/difiore/ada-datasets/main/Street_et_al_2017.csv"
+d <- read_csv(f, col_names = TRUE)
+
+skim(d)
+
+#Step 2
+ggplot(data = d, aes(x = Group_size, y = ECV)) + geom_point() + geom_smooth(method = "lm")
+ggplot(data = d, aes(x = Longevity, y = ECV)) + geom_point() + geom_smooth(method = "lm")
+ggplot(data = d, aes(x = Weaning, y = ECV)) + geom_point() + geom_smooth(method = "lm")
+ggplot(data = d, aes(x = Repro_lifespan, y = ECV)) + geom_point() + geom_smooth(method = "lm")
+
+#Step 3
+clean_d <- na.omit(d[, c("ECV", "Group_size")])
+clean_d
+
+x <- clean_d$Group_size
+y <- clean_d$ECV
+mean_x <- mean(x)
+mean_y <- mean(y)
+
+beta1 <- sum((x - mean_x) * (y - mean_y)) / sum((x - mean_x)^2)
+beta1
+beta0 <- mean_y - beta1 * mean_x
+beta0
+
+#Step 4
+m <- lm(ECV ~ Group_size, data = clean_d)
+tidy(m)
+
+#Step 5 
+clean_d2 <- na.omit(d[, c("ECV", "Group_size", "Taxonomic_group")])
+groups <- split(clean_d2, clean_d2$Taxonomic_group)
+groups
+m2 <- lm(ECV ~ Group_size * Taxonomic_group, data = clean_d2)
+tidy(m2)
+
+# Step 6
+# Calculating the standard error of the slope 
+n <- nrow(clean_d)
+df <- n - 2 
+residuals <- y - (beta0 + beta1 * x)
+s <- sqrt(sum(residuals^2) / (n - 2))
+SE_beta1 <- s / sqrt(sum((x - mean_x)^2))
+SE_beta1
+SE_slope <- coef(summary(m))["Group_size", "Std. Error"]
+SE_slope 
+
+#Calculating the 95% confidence interval 
+t_star <- qt(0.975, df)
+lower <- beta1 - t_star * SE_slope
+upper <- beta1 + t_star * SE_slope
+c(lower, upper)
+confint(m)["Group_size", ]
+
+#Calculating the p-value
+t <- beta1 / SE_slope
+p_value <- 2 * (1 - pt(abs(t), df))
+p_value
+summary(m)
+coef(summary(m))["Group_size", "Pr(>|t|)"]
+
+#Step 7 
+obs_slope <- coef(summary(m))["Group_size", "Estimate"]
+obs_slope
+
+nperm <- 1000
+perm_coefs <- vector(length = nperm)
+for(i in 1:nperm) {
+ ECV_perm <- sample(clean_d$ECV)
+ fit_perm <- lm(ECV_perm ~ Group_size, data = clean_d)
+ perm_coefs[i] <- coef(fit_perm)[2]
+}
+perm_coefs 
+p_value <- mean(abs(perm_coefs) >= abs(obs_slope))
+p_value
+
+#Step 8
+#The slope coefficient is significantly different from 0 because the CIs do not include 0. 
+nboot <- 1000 
+boot_coefs <- vector(length = nboot)
+for(i in 1:nboot) {
+ boot_data <- clean_d[sample(1:nrow(clean_d), replace = TRUE), ]
+  fit_boot <- lm(ECV ~ Group_size, data = boot_data)
+  boot_coefs[i] <- coef(fit_boot)[2]
+}
+ci_quantile <- quantile(boot_coefs, c(0.025, 0.975))
+ci_quantile
+
